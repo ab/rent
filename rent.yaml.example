@@ -1,0 +1,22 @@
+---
+people:
+  alice:
+    email: Alice <alice@example.com>
+    rent: 50
+    cc: false
+  bob:
+    email: Bob <bob@example.com>
+    rent: 60
+    cc: request@square.com
+
+email:
+  from: Me <me@example.com>
+  bcc: Me <me@example.com>
+
+# Utility bills are listed in the month that the payment was assessed.
+# In the email for April rent, the March utility bills will be included.
+utilities:
+  2014:
+    3:
+      Gas: 100.50
+      Internet: 50.5
