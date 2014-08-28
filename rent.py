@@ -1,4 +1,13 @@
 #!/usr/bin/env python
+
+"""
+usage: rent.py YAML_FILE [dry|real]
+
+Send a rent reminder email based on data from YAML_FILE.
+
+If dry is passed, no email will actually be sent.
+"""
+
 import smtplib
 import sys
 import yaml
@@ -13,8 +22,12 @@ def first_next_month(start):
 class NoUtilityInfo(KeyError):
     pass
 
+def usage():
+    sys.stderr.write(__doc__.lstrip())
+
 class RentReminder(object):
-    def __init__(self, config_file, rent_date=None, smtp_server='localhost'):
+    def __init__(self, config_file, rent_date=None, smtp_server='localhost',
+                 dry_run=True):
         self.config = self.load_config(config_file)
         if rent_date is None:
             self.today = date.today()
@@ -22,6 +35,7 @@ class RentReminder(object):
             self.today = rent_date
         self.due_date = first_next_month(self.today)
         self.smtp_server = smtp_server
+        self.dry_run = dry_run
 
     def load_config(self, filename):
         return yaml.safe_load(open(filename, 'r'))
@@ -94,19 +108,38 @@ class RentReminder(object):
         for i in ['from', 'recipients', 'message']:
             print i + ':', repr(data[i])
 
+        self.send_email(data['from'], data['recipients'], data['message'])
+
+    def send_email(self, from_address, recipients, data):
+        if self.dry_run:
+            print 'Not sending email due to dry run'
+            return
+
         s = smtplib.SMTP(self.smtp_server)
         s.set_debuglevel(1)
-        s.sendmail(data['from'], data['recipients'], data['message'])
+        s.sendmail(from_address, recipients, data)
         s.quit()
 
         print 'Sent email'
+
 
     def send_all_email(self):
         for name in self.config['people'].keys():
             self.send_email_for(name)
 
 if __name__ == '__main__':
-    r = RentReminder(sys.argv[1])
-    if sys.argv[2] == 'email':
-        r.send_all_email()
+    if len(sys.argv) < 3:
+        usage()
+        sys.exit(1)
+
+    if sys.argv[2] == 'dry':
+        dry_run = True
+    elif sys.argv[2] == 'real':
+        dry_run = False
+    else:
+        usage()
+        sys.exit(1)
+
+    r = RentReminder(sys.argv[1], dry_run=dry_run)
+    r.send_all_email()
 
