@@ -25,6 +25,26 @@ class NoUtilityInfo(KeyError):
 def usage():
     sys.stderr.write(__doc__.lstrip())
 
+class RentComponent(object):
+    def __init__(self, name, total, divided_among):
+        self.name = name
+        self.total = total
+        self.divided_among = divided_among
+
+        if divided_among > 1:
+            self.share = float(total) / divided_among
+        elif divided_among == 1:
+            self.share = total
+        else:
+            raise ValueError('Unexpected divided_among: %r' % divided_among)
+
+    def __str__(self):
+        if self.divided_among == 1:
+            return '{}: {:.2f}'.format(self.name, self.total)
+        else:
+            return '{}: {:.2f} = {:.2f} / {}'.format(
+                self.name, self.share, self.total, self.divided_among)
+
 class RentReminder(object):
     def __init__(self, config_file, rent_date=None, smtp_server='localhost',
                  dry_run=True):
@@ -41,7 +61,8 @@ class RentReminder(object):
         return yaml.safe_load(open(filename, 'r'))
 
     def rent_for(self, name):
-        return self.config['people'][name]['rent']
+        """Return the current rent for a given person"""
+        return self.due_date_rents()[name]
 
     def utility_info(self):
         utilities = self.config['utilities']
@@ -59,11 +80,44 @@ class RentReminder(object):
         return len(self.config['people']) + 1
 
     def total_for(self, name):
-        utilities = sum(self.utility_info().values()) / self.num_payers()
-        return self.rent_for(name) + utilities
+        return sum(p.share for p in self.parts_for(name))
+
+    def all_rents(self):
+        return self.config['rent']
+
+    def due_date_rents(self):
+        """Return a dict mapping name to rent for the due date."""
+        if not hasattr(self, '_due_date_rents'):
+            self._due_date_rents = self.rents_as_of(self.due_date)
+
+        return self._due_date_rents
+
+    def rents_as_of(self, rent_date):
+        """
+        Return a dict mapping name to rent for the given date.
+        """
+        if rent_date is None:
+            rent_date = date.today()
+
+        for rent_hash in reversed(self.all_rents()):
+            if rent_date >= rent_hash['since']:
+                print 'Using rent as of', rent_hash['since']
+                return rent_hash['splits']
+
+        raise KeyError('Cannot find rent for %r' % rent_date)
 
     def due_month_name(self):
         return self.due_date.strftime('%B')
+
+    def parts_for(self, name):
+        """Return a list of RentComponent objects for person `name`."""
+        parts = []
+        parts.append(RentComponent('Rent', self.rent_for(name), 1))
+
+        for k, v in sorted(self.utility_info().iteritems()):
+            parts.append(RentComponent(k, float(v), self.num_payers()))
+
+        return parts
 
     def email_for(self, name):
         person_config = self.config['people'][name]
@@ -80,11 +134,9 @@ class RentReminder(object):
 
         recipients.append(self.config['email']['bcc'])
 
-        parts = [('Rent', person_config['rent'])]
-        parts += [(k, v) for k, v in self.utility_info_share().iteritems()]
-
-        total = round(sum(p[1] for p in parts), 2)
-        assert total == round(self.total_for(name), 2)
+        parts = self.parts_for(name)
+        total = round(sum(p.share for p in parts), 2)
+        assert total == round(self.total_for(name), 2) # useless double check
 
         subject = "{} rent is ${:.2f}".format(self.due_month_name(), total)
 
@@ -92,7 +144,10 @@ class RentReminder(object):
 
         header_block = '\n'.join(name + ': ' + val for name, val in headers)
 
-        parts_block = '\n'.join('{}: {}'.format(k, v) for k, v in parts)
+        parts_block = '\n'.join(str(p) for p in parts)
+
+        parts_block += '\n' + '=' * 14
+        parts_block += '\nTotal: {:.2f}'.format(total)
 
         return {
             'from': from_address,
@@ -113,6 +168,8 @@ class RentReminder(object):
     def send_email(self, from_address, recipients, data):
         if self.dry_run:
             print 'Not sending email due to dry run'
+            for line in data.split('\n'):
+                print '| ' + line
             return
 
         s = smtplib.SMTP(self.smtp_server)
