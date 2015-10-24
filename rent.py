@@ -119,6 +119,21 @@ class RentReminder(object):
 
         return parts
 
+    def payment_links_for(self, name, total):
+        links = []
+
+        person_config = self.config['people'][name]
+
+        if person_config.get('paypal_me'):
+            links.append('https://www.paypal.me/{}/{:.2f}'.format(
+                self.config['payment_links']['paypal'], total))
+
+        if person_config.get('square_me'):
+            links.append('https://cash.me/{}/{:.2f}'.format(
+                self.config['payment_links']['square'], total))
+
+        return links
+
     def email_for(self, name):
         person_config = self.config['people'][name]
         from_address = self.config['email']['from']
@@ -148,6 +163,11 @@ class RentReminder(object):
 
         parts_block += '\n' + '=' * 14
         parts_block += '\nTotal: {:.2f}'.format(total)
+
+        links = self.payment_links_for(name, total)
+
+        if links:
+            parts_block += '\n\n' + '\n'.join(links)
 
         return {
             'from': from_address,

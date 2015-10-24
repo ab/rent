@@ -4,6 +4,8 @@ people:
     email: Alice <alice@example.com>
     rent: 50
     cc: false
+    paypal_me: true
+    square_me: false
   bob:
     email: Bob <bob@example.com>
     rent: 60
@@ -12,6 +14,10 @@ people:
 email:
   from: Me <me@example.com>
   bcc: Me <me@example.com>
+
+payment_links:
+  paypal: paypalmeusername
+  square: cashmeusername
 
 # Utility bills are listed in the month that the payment was assessed.
 # In the email for April rent, the March utility bills will be included.
